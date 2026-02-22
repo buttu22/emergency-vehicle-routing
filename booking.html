@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Emergency Booking</title>
+  <style>
+    body { font-family: system-ui; background:#0b1130; color:#eaf3ff; margin:0; padding:20px; }
+    .card { max-width:540px; margin:20px auto; background:#0d1333cc; border:1px solid #1e2a55; border-radius:16px; padding:16px; }
+    label { display:block; margin-top:10px; font-size:14px; }
+    input, select, textarea { width:100%; padding:10px; border-radius:12px; border:1px solid #2a3b6e; background:#0a1335; color:#f5fbff; }
+    button { margin-top:16px; padding:12px 14px; border-radius:12px; border:1px solid #2a3b6e; background:linear-gradient(90deg, #11ffd1, #5a7dff); color:#041a16; font-weight:800; cursor:pointer; }
+    .status { margin-top:10px; font-size:13px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Book Emergency Vehicle</h2>
+    <label>Patient Name</label>
+    <input id="name" placeholder="Full name">
+    <label>Phone</label>
+    <input id="phone" placeholder="10-digit number">
+    <label>Source State</label>
+    <input id="state" placeholder="e.g., Maharashtra">
+    <label>Source District</label>
+    <input id="district" placeholder="e.g., Mumbai">
+    <label>Address / Notes</label>
+    <textarea id="notes" rows="3" placeholder="Landmark, condition, etc."></textarea>
+    <button id="bookBtn">Book Vehicle</button>
+    <div class="status" id="status">Idle</div>
+  </div>
+  <script>
+    document.getElementById("bookBtn").addEventListener("click", async ()=>{
+      const payload = {
+        name: document.getElementById("name").value.trim(),
+        phone: document.getElementById("phone").value.trim(),
+        state: document.getElementById("state").value.trim(),
+        district: document.getElementById("district").value.trim(),
+        notes: document.getElementById("notes").value.trim()
+      };
+      document.getElementById("status").textContent = "Sending booking…";
+      try {
+        const broker = "http://" + location.hostname + ":5515";
+        const res = await fetch(broker + "/book", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const j = await res.json();
+        if (j && j.ok) {
+          document.getElementById("status").textContent = "Booked! Reference #"+j.seq;
+        } else {
+          document.getElementById("status").textContent = "Failed to book.";
+        }
+      } catch(e) {
+        document.getElementById("status").textContent = "Server not reachable.";
+      }
+    });
+  </script>
+  </body>
+</html>

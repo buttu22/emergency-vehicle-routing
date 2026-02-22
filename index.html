@@ -1,0 +1,943 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Emergency Vehicle Priority System</title>
+  <link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet">
+  <style>
+    :root { --bg:#0a0f24; --panel:#0d1333cc; --accent:#11ffd1; --accent2:#5a7dff; --red:#ff4d4d; --green:#2eea88; --text:#eaf3ff; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; background:radial-gradient(1200px 600px at 10% 10%, #0a1638 0%, #060a1a 50%, #030611 100%); color:var(--text); }
+    header { display:flex; align-items:center; justify-content:space-between; padding:18px 24px; background:linear-gradient(90deg, #0c1430, #0a1028); box-shadow:0 6px 20px #0006; }
+    header h1 { font-size:18px; margin:0; letter-spacing:.4px; background:linear-gradient(90deg, #bfe9ff, #8afff0); -webkit-background-clip:text; background-clip:text; color:transparent; }
+    header .badge { background:linear-gradient(90deg, var(--accent), #6ff7ff); color:#001a16; padding:8px 12px; border-radius:999px; font-weight:700; box-shadow:0 0 20px #11ffd155; }
+    .layout { display:grid; grid-template-columns: 360px 1fr; gap:18px; padding:18px; height:calc(100vh - 70px); }
+    .panel { background:var(--panel); border:1px solid #1e2a55; border-radius:16px; padding:16px; display:flex; flex-direction:column; gap:14px; backdrop-filter: blur(10px); box-shadow:0 12px 30px #0008; }
+    .panel h2 { font-size:15px; margin:0; padding-bottom:6px; border-bottom:1px dashed #253062; color:#cfe7ff; }
+    .panel .row { display:flex; align-items:center; gap:10px; }
+    .panel label { font-size:14px; opacity:.98; min-width:140px; }
+    .panel input[type="text"], .panel select, .panel input[type="number"] { flex:1; padding:12px 14px; border-radius:12px; border:1px solid #2a3b6e; background:linear-gradient(180deg, #0b1440, #0a1335); color:#f5fbff; box-shadow:inset 0 0 0 999px #0000, 0 6px 16px #0006; outline:none; font-size:15px; }
+    .panel input[type="text"]:focus, .panel select:focus, .panel input[type="number"]:focus { border-color:#50ffd6; box-shadow:0 0 0 3px #11ffd13a; }
+    .panel .btns { display:flex; gap:10px; }
+    .btn { padding:12px 14px; border-radius:12px; border:1px solid #2a3b6e; background:linear-gradient(180deg, #0b1440, #0a1335); color:var(--text); cursor:pointer; transition:transform .08s ease, box-shadow .15s ease, background .2s ease; }
+    .btn:hover { transform:translateY(-1px); box-shadow:0 10px 18px #0007; }
+    .btn.primary { background:linear-gradient(90deg, var(--accent), var(--accent2)); color:#041a16; border-color:#37f1cf; font-weight:800; box-shadow:0 0 20px #11ffd155; }
+    .btn.stop { background:linear-gradient(90deg, #ffd84a, #ffb300); color:#1a1200; border-color:#f0c03a; font-weight:700; }
+    .stats { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .stat { background:linear-gradient(180deg, #0a1136, #0b1544); border:1px solid #253062; border-radius:12px; padding:12px; box-shadow:0 10px 22px #0007; }
+    .stat b { display:block; font-size:12px; opacity:.82; }
+    .stat span { font-size:19px; font-weight:800; background:linear-gradient(90deg, #eaffff, #9fffe8); -webkit-background-clip:text; background-clip:text; color:transparent; }
+    #map { width:100%; height:100%; border:1px solid #1e2a55; border-radius:16px; box-shadow:0 14px 34px #0009; }
+    .legend { display:flex; gap:12px; align-items:center; font-size:12px; opacity:.94; }
+    .dot { width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:6px; border:1px solid #0004; }
+    .voice-status { font-size:12px; color:#cfe7ff; opacity:.9; }
+    select option { color:#0e1433 !important; background:#ffffff !important; font-size:16px; font-weight:600; }
+    select optgroup { color:#0e1433 !important; background:#ffffff !important; }
+    select option { color:#0f1833; background:#eaf1ff; font-size:15px; }
+    select optgroup { color:#0f1833; background:#eaf1ff; }
+    input::placeholder { color:#cfe0ff; opacity:.9; }
+    .ambu-icon { }
+    .ambu { position:relative; display:flex; align-items:center; justify-content:center; width:30px; height:30px; transform:translate(-50%,-50%); }
+    .ambu .emoji { font-size:22px; filter: drop-shadow(0 1px 2px #0008); }
+    .ambu .beacon { position:absolute; top:-6px; width:10px; height:10px; border-radius:50%; }
+    .beacon.center { left:50%; transform:translateX(-50%); background:#ff3b3b; box-shadow:0 0 10px #ff3b3b; animation:pulse 1s infinite; }
+    .beacon.left { left:35%; transform:translateX(-50%); background:#ff3b3b; box-shadow:0 0 10px #ff3b3b; animation:pulse 1s infinite; }
+    .beacon.right { left:65%; transform:translateX(-50%); background:#2e8bff; box-shadow:0 0 10px #2e8bff; animation:pulseAlt 1s infinite; }
+    @keyframes pulse { 0%{opacity:.2; transform:translateX(-50%) scale(.7)} 50%{opacity:1; transform:translateX(-50%) scale(1.3)} 100%{opacity:.2; transform:translateX(-50%) scale(.7)} }
+    @keyframes pulseAlt { 0%{opacity:1; transform:translateX(-50%) scale(1.3)} 50%{opacity:.2; transform:translateX(-50%) scale(.7)} 100%{opacity:1; transform:translateX(-50%) scale(1.3)} }
+    .signal { width:18px; height:38px; display:flex; flex-direction:column; align-items:center; filter: drop-shadow(0 2px 4px #0008); }
+    .sig-head { width:18px; height:30px; background:#111a33; border:1px solid #253062; border-radius:6px; display:flex; flex-direction:column; justify-content:space-between; padding:3px; }
+    .sig-light { width:10px; height:10px; border-radius:50%; background:#333; }
+    .sig-pole { width:3px; height:20px; background:#555; border:1px solid #222; border-radius:2px; margin-top:2px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Emergency Vehicle Priority System</h1>
+    <div class="badge">Demo</div>
+  </header>
+  <main class="layout">
+    <section class="panel">
+      <h2>Controls</h2>
+      <div class="btns">
+        <button class="btn" id="voiceSetupBtn">Voice Setup Route</button>
+      </div>
+      <div class="voice-status" id="voiceStatus">Mic: idle</div>
+      <div class="row">
+        <label>Driver Notify</label>
+        <div id="driverNotify">Idle</div>
+      </div>
+      
+      <h2>Source</h2>
+      <div class="row">
+        <label>State</label>
+        <select id="sourceState"></select>
+      </div>
+      <div class="row">
+        <label>District</label>
+        <select id="sourceDistrict"></select>
+      </div>
+      <h2>Destination</h2>
+      <div class="row">
+        <label>State</label>
+        <select id="destState"></select>
+      </div>
+      <div class="row">
+        <label>District</label>
+        <select id="destDistrict"></select>
+      </div>
+      <div class="row">
+        <label>Hospital</label>
+        <select id="destHospital"></select>
+      </div>
+      <div class="row">
+        <label>Map View</label>
+        <select id="mapView">
+          <option value="road">Road</option>
+          <option value="satellite">Satellite</option>
+        </select>
+      </div>
+      <div class="row">
+        <label>Vehicle Type</label>
+        <select id="vehicleType">
+          <option value="ambulance">Ambulance</option>
+          <option value="fire">Fire Truck</option>
+        </select>
+      </div>
+      <div class="row">
+        <label>Emergency Mode</label>
+        <label class="switch">
+          <input id="emergencyToggle" type="checkbox">
+          <span>On</span>
+        </label>
+      </div>
+      <div class="row">
+        <label>Opposite Ambulance</label>
+        <label class="switch">
+          <input id="secondAmbulanceToggle" type="checkbox">
+          <span>On</span>
+        </label>
+      </div>
+      <div class="row">
+        <label>Number of Signals</label>
+        <input id="signalsCount" type="number" min="1" max="50" value="12">
+      </div>
+      <div class="btns">
+        <button class="btn" id="applySignals">Apply Signals</button>
+      </div>
+      <div class="btns">
+        <button class="btn primary" id="startBtn">Start Simulation</button>
+        <button class="btn stop" id="stopBtn">Stop</button>
+      </div>
+      <div class="legend">
+        <span class="dot" style="background: var(--green)"></span> Ambulance A Green
+        <span class="dot" style="background: #2e8bff"></span> Ambulance B Green
+        <span class="dot" style="background: var(--red)"></span> Red
+      </div>
+      <h2>Metrics</h2>
+      <div class="row">
+        <label>Speed (km/h)</label>
+        <select id="speedSelect">
+          <option value="20">20</option>
+          <option value="30">30</option>
+          <option value="40">40</option>
+          <option value="50">50</option>
+          <option value="60" selected>60</option>
+          <option value="80">80</option>
+          <option value="100">100</option>
+          <option value="120">120</option>
+          <option value="130">130</option>
+          <option value="140">140</option>
+        </select>
+      </div>
+      <div class="stats">
+        <div class="stat"><b>ETA</b><span id="eta">—</span></div>
+        <div class="stat"><b>Intersections Cleared</b><span id="cleared">0</span></div>
+        <div class="stat"><b>Time Saved</b><span id="saved">0 s</span></div>
+        <div class="stat"><b>Speed</b><span id="speed">36 km/h</span></div>
+      </div>
+    </section>
+    <section>
+      <div id="map"></div>
+    </section>
+  </main>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const sourceStateEl = document.getElementById("sourceState");
+    const sourceDistrictEl = document.getElementById("sourceDistrict");
+    const destStateEl = document.getElementById("destState");
+    const destDistrictEl = document.getElementById("destDistrict");
+    const destHospitalEl = document.getElementById("destHospital");
+    const toRad = d => d * Math.PI / 180;
+    const R = 6371000;
+    function haversine(a, b) {
+      const dLat = toRad(b.lat - a.lat);
+      const dLng = toRad(b.lng - a.lng);
+      const lat1 = toRad(a.lat);
+      const lat2 = toRad(b.lat);
+      const h = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)**2;
+      return 2 * R * Math.asin(Math.sqrt(h));
+    }
+    function formatEta(seconds) {
+      const m = Math.floor(seconds/60);
+      const s = Math.floor(seconds%60);
+      return m+"m "+s+"s";
+    }
+    const map = L.map('map', { zoomControl: true });
+    const roadTiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
+    const satTiles = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18 });
+    roadTiles.addTo(map);
+    map.createPane('trafficPane'); map.getPane('trafficPane').style.zIndex = 600;
+    map.createPane('routePane'); map.getPane('routePane').style.zIndex = 650;
+    const trafficLayer = L.layerGroup().addTo(map);
+    let route = [];
+    let poly = null;
+    let intersections = [];
+    const markers = {};
+    let hospitalMarker = null;
+    function makeVehicleIcon(type) {
+      if (type === "fire") {
+        return L.divIcon({ className: 'ambu-icon', html: '<div class=\"ambu\"><span class=\"beacon left\"></span><span class=\"beacon right\"></span><span class=\"emoji\">🚒</span></div>', iconSize: [30,30], iconAnchor: [15,15] });
+      }
+      return L.divIcon({ className: 'ambu-icon', html: '<div class=\"ambu\"><span class=\"beacon center\"></span><span class=\"emoji\">🚑</span></div>', iconSize: [30,30], iconAnchor: [15,15] });
+    }
+    function makeHospitalIcon() {
+      return L.divIcon({ className: 'ambu-icon', html: '<div class=\"ambu\"><span class=\"emoji\">🏥</span></div>', iconSize: [30,30], iconAnchor: [15,15] });
+    }
+    function signalIconHTML(state) {
+      const isGreen1 = state === "green1";
+      const isGreen2 = state === "green2";
+      const isRed = !isGreen1 && !isGreen2;
+      const greenColor = isGreen1 ? "#2ecc71" : isGreen2 ? "#2e8bff" : "#333";
+      const redColor = isRed ? "#e74c3c" : "#333";
+      const greenGlow = (isGreen1||isGreen2) ? "0 0 8px "+greenColor : "";
+      const redGlow = isRed ? "0 0 8px "+redColor : "";
+      return '<div class="signal"><div class="sig-head">'
+        + '<span class="sig-light" style="background:'+redColor+'; box-shadow:'+redGlow+'"></span>'
+        + '<span class="sig-light" style="background:#f1c40f; opacity:0.4"></span>'
+        + '<span class="sig-light" style="background:'+greenColor+'; box-shadow:'+greenGlow+'"></span>'
+        + '</div><div class="sig-pole"></div></div>';
+    }
+    function makeSignalIcon(state) {
+      return L.divIcon({ className: '', html: signalIconHTML(state), iconSize: [18,38], iconAnchor: [9,19] });
+    }
+    function signalOffsetCoord(ix) {
+      const idx = Math.max(0, Math.min(route.length-2, (ix.nearestIdx||0)));
+      const a = route[idx], b = route[idx+1];
+      const mLat = 111320;
+      const mLng = 111320 * Math.cos(a.lat * Math.PI / 180);
+      const vx = (b.lng - a.lng) * mLng;
+      const vy = (b.lat - a.lat) * mLat;
+      const px = -vy, py = vx;
+      const L = Math.sqrt(px*px + py*py) || 1;
+      const off = 30;
+      const ox = (px / L) * off;
+      const oy = (py / L) * off;
+      const midLat = (a.lat + b.lat)/2;
+      const midLng = (a.lng + b.lng)/2;
+      return { lat: midLat + (oy / mLat), lng: midLng + (ox / mLng) };
+    }
+    const vehicleMarker = L.marker([20.5937, 78.9629], { icon: makeVehicleIcon(document.getElementById('vehicleType').value) }).addTo(map);
+    let emergency = false;
+    let emergency2 = false;
+    const priorityMeters = 300;
+    const conflictRadius = 120;
+    const waitMs = 3000;
+    let lastGrant = "A";
+    let pausedUntilA = 0, pausedUntilB = 0;
+    let sim = null;
+    let vehicleMarker2 = null;
+    let route2 = [];
+    let idx = 0;
+    let clearedCount = 0;
+    let savedSeconds = 0;
+    let speedKmh = 60;
+    const baseSpeedKmh = 36;
+    const stepMs = 700;
+    let audioCtx = null, sirenOsc = null, lfo = null, lfoGain = null, sirenGain = null, hiLoTimer = null;
+    let recognition = null, listening = false;
+    let micStream = null, micReady = false;
+    const voiceStatusEl = document.getElementById("voiceStatus");
+    const driverNotifyEl = document.getElementById("driverNotify");
+    function speak(text) {
+      try {
+        speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = 'en-IN';
+        speechSynthesis.speak(u);
+      } catch {}
+    }
+    function speakThen(text, after) {
+      try {
+        speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = 'en-IN';
+        if (after) u.onend = ()=>after();
+        speechSynthesis.speak(u);
+      } catch { if (after) after(); }
+    }
+    function initRecognition() {
+      if (recognition) return;
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) { if (voiceStatusEl) voiceStatusEl.textContent = "Voice not supported. Use Chrome."; return; }
+      recognition = new SR();
+      recognition.lang = 'en-IN';
+      recognition.interimResults = false;
+      recognition.continuous = false;
+      recognition.onend = ()=>{ listening = false; };
+    }
+    async function ensureMic() {
+      try {
+        if (micReady && micStream) { if (voiceStatusEl) voiceStatusEl.textContent = "Mic ready"; return true; }
+        micStream = await navigator.mediaDevices.getUserMedia({ audio:true });
+        micReady = true;
+        if (voiceStatusEl) voiceStatusEl.textContent = "Mic ready";
+        return true;
+      } catch (e) {
+        if (voiceStatusEl) voiceStatusEl.textContent = "Mic blocked. Allow microphone access.";
+        return false;
+      }
+    }
+    function listenOnce(cb) {
+      initRecognition();
+      if (!recognition || listening) return;
+      listening = true;
+      if (voiceStatusEl) voiceStatusEl.textContent = "Listening…";
+      recognition.onresult = e=>{
+        const t = (e.results[0][0].transcript||'').toLowerCase();
+        if (voiceStatusEl) voiceStatusEl.textContent = "Heard: "+t;
+        cb(t);
+      };
+      try { recognition.start(); } catch {}
+    }
+    function matchState(text) {
+      const n = text.replace(/[^a-z ]/g,'').trim();
+      let best = null, score = -1;
+      states.forEach(s=>{
+        const name = s.name.toLowerCase();
+        let sc = -1;
+        if (n===name) sc=3; else if (name.includes(n)||n.includes(name)) sc=2; else if (n.split(' ').some(w=>name.includes(w))) sc=1;
+        if (sc>score) { score=sc; best=s.name; }
+      });
+      return best;
+    }
+    function matchDistrict(stateName, text) {
+      const list = fallbackDistricts[stateName] || [];
+      const n = text.replace(/[^a-z ]/g,'').trim();
+      let best = null, score = -1;
+      list.forEach(d=>{
+        const name = d.toLowerCase();
+        let sc = -1;
+        if (n===name) sc=3; else if (name.includes(n)||n.includes(name)) sc=2; else if (n.split(' ').some(w=>name.includes(w))) sc=1;
+        if (sc>score) { score=sc; best=d; }
+      });
+      return best || list[0] || "Central";
+    }
+    function matchHospital(stateName, districtName, text) {
+      const list = [
+        districtName+" Government Hospital",
+        districtName+" Civil Hospital",
+        "Apollo Hospital",
+        "Fortis Hospital"
+      ];
+      const t = text.toLowerCase();
+      if (t.includes("apollo")) return "Apollo Hospital";
+      if (t.includes("fortis")) return "Fortis Hospital";
+      if (t.includes("government")) return districtName+" Government Hospital";
+      if (t.includes("civil")) return districtName+" Civil Hospital";
+      return list[0];
+    }
+    function isOk(t) {
+      const x = (t||"").toLowerCase();
+      return x.includes("ok") || x.includes("okay");
+    }
+    function confirmOk(next) {
+      speakThen("Say OK to confirm", ()=>{
+        listenOnce(tf=>{
+          if (isOk(tf)) next();
+          else confirmOk(next);
+        });
+      });
+    }
+    function voiceSetupRoute() {
+      ensureMic().then(ok=>{
+        if (!ok) return;
+        speakThen("Say source state", ()=>{
+          listenOnce(ts=>{
+            const s = matchState(ts) || sourceStateEl.value;
+            sourceStateEl.value = s;
+            populateDistricts(s, sourceDistrictEl);
+            speakThen("Say source district", ()=>{
+              listenOnce(td=>{
+                const d = matchDistrict(s, td);
+                sourceDistrictEl.value = d;
+                speakThen("Say destination state", ()=>{
+                  listenOnce(tds=>{
+                    const ds = matchState(tds) || destStateEl.value;
+                    destStateEl.value = ds;
+                    populateDistricts(ds, destDistrictEl);
+                    speakThen("Say destination district", ()=>{
+                      listenOnce(td2=>{
+                        const dd = matchDistrict(ds, td2);
+                        destDistrictEl.value = dd;
+                        populateHospitals(ds, dd, destHospitalEl);
+                        speakThen("Say destination hospital", ()=>{
+                          listenOnce(th=>{
+                            const h = matchHospital(ds, dd, th);
+                            destHospitalEl.value = h;
+                            speakThen("Inputs completed.", ()=>{});
+                          });
+                        });
+                      });
+                    });
+                  });
+                });
+              });
+            });
+          });
+        });
+      });
+    }
+    function startSiren(type) {
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      } catch { return; }
+      stopSiren();
+      sirenGain = audioCtx.createGain();
+      sirenGain.gain.value = 0.08;
+      sirenGain.connect(audioCtx.destination);
+      sirenOsc = audioCtx.createOscillator();
+      sirenOsc.type = 'sine';
+      lfo = audioCtx.createOscillator();
+      lfoGain = audioCtx.createGain();
+      const isAmbu = type === 'ambulance';
+      const f1 = isAmbu ? 800 : 900;
+      const f2 = isAmbu ? 1200 : 1300;
+      sirenOsc.frequency.value = f1;
+      lfo.frequency.value = isAmbu ? 2.2 : 2.8;
+      lfoGain.gain.value = 300;
+      lfo.connect(lfoGain);
+      lfoGain.connect(sirenOsc.frequency);
+      sirenOsc.connect(sirenGain);
+      lfo.start();
+      sirenOsc.start();
+      let toggle = false;
+      hiLoTimer = setInterval(()=>{
+        toggle = !toggle;
+        sirenOsc.frequency.setValueAtTime(toggle ? f2 : f1, audioCtx.currentTime);
+      }, 180);
+    }
+    function stopSiren() {
+      try {
+        if (sirenOsc) { sirenOsc.stop(); sirenOsc.disconnect(); }
+        if (lfo) { lfo.stop(); lfo.disconnect(); }
+        if (sirenGain) { sirenGain.disconnect(); }
+      } catch {}
+      if (hiLoTimer) { clearInterval(hiLoTimer); hiLoTimer = null; }
+      sirenOsc = null; lfo = null; lfoGain = null; sirenGain = null;
+    }
+    document.getElementById("emergencyToggle").addEventListener("change", e=>{
+      emergency = e.target.checked;
+      if (!emergency) stopSiren(); else if (sim) startSiren(document.getElementById('vehicleType').value);
+    });
+    document.getElementById("vehicleType").addEventListener("change", e=>{
+      vehicleMarker.setIcon(makeVehicleIcon(e.target.value));
+      if (e.target.value === "ambulance") {
+        applyTheme("medical");
+      } else {
+        applyTheme("fire");
+      }
+      if (sirenOsc || sim) startSiren(e.target.value);
+    });
+    const signalsCountEl = document.getElementById("signalsCount");
+    document.getElementById("applySignals").addEventListener("click", ()=>{
+      if (!route.length) return;
+      const n = Math.max(1, parseInt(signalsCountEl.value || "12", 10));
+      intersections = buildIntersectionsFromRoute(route, n);
+      intersections.forEach(ix=>{ ix.state="red"; ix.nearestIdx = nearestIndexOnRoute(ix); });
+      refreshMap();
+    });
+    const speedSelectEl = document.getElementById("speedSelect");
+    document.getElementById("speed").innerText = speedKmh+" km/h";
+    speedSelectEl.addEventListener("change", e=>{
+      speedKmh = parseInt(e.target.value,10);
+      document.getElementById("speed").innerText = speedKmh+" km/h";
+      updateStats();
+    });
+    const mapViewEl = document.getElementById("mapView");
+    function applyMapView(v) {
+      if (v === "satellite") {
+        if (map.hasLayer(roadTiles)) map.removeLayer(roadTiles);
+        if (!map.hasLayer(satTiles)) satTiles.addTo(map);
+      } else {
+        if (map.hasLayer(satTiles)) map.removeLayer(satTiles);
+        if (!map.hasLayer(roadTiles)) roadTiles.addTo(map);
+      }
+    }
+    applyMapView(mapViewEl.value);
+    mapViewEl.addEventListener("change", e=>applyMapView(e.target.value));
+    const themes = {
+      medical: {
+        '--bg':'#0a0f24',
+        '--panel':'#0d1333cc',
+        '--accent':'#11ffd1',
+        '--accent2':'#5a7dff',
+        '--red':'#ff4d4d',
+        '--green':'#2eea88',
+        '--text':'#eaf3ff'
+      },
+      fire: {
+        '--bg':'#0a0a0f',
+        '--panel':'#151522cc',
+        '--accent':'#ff5a4d',
+        '--accent2':'#ffb347',
+        '--red':'#ff3b3b',
+        '--green':'#79ff67',
+        '--text':'#fff1f1'
+      }
+    };
+    function applyTheme(name) {
+      const t = themes[name] || themes.medical;
+      Object.keys(t).forEach(k=>document.documentElement.style.setProperty(k, t[k]));
+    }
+    applyTheme("medical");
+    function updateStats() {
+      const i = Math.floor(posIdx);
+      const t = posIdx - i;
+      let dist = 0;
+      if (route.length>1) {
+        const cur = i>=route.length-1 ? route[route.length-1] : {
+          lat: route[i].lat + (route[i+1].lat - route[i].lat)*t,
+          lng: route[i].lng + (route[i+1].lng - route[i].lng)*t
+        };
+        if (i<route.length-1) dist += haversine(cur, route[i+1]);
+        for (let k=i+1;k<route.length-1;k++) dist += haversine(route[k], route[k+1]);
+      }
+      const speedMs = speedKmh*1000/3600;
+      const etaSec = dist/speedMs;
+      document.getElementById("eta").innerText = formatEta(etaSec);
+      document.getElementById("cleared").innerText = clearedCount;
+      document.getElementById("saved").innerText = Math.round(savedSeconds)+" s";
+    }
+    function setLight(id, state) {
+      const m = markers[id];
+      if (!m) return;
+      const label = state==="green1"?"Ambulance A":state==="green2"?"Ambulance B":"red";
+      m.setIcon(makeSignalIcon(state));
+      m.bindTooltip("Signal "+id+" ("+label+")", { permanent:false });
+    }
+    function wavePriorityAround(pos1, prev1, cur1, pos2, prev2, cur2, allow1, allow2) {
+      intersections.forEach(ix=>{
+        const d1 = pos1 ? haversine({lat:pos1.lat,lng:pos1.lng},{lat:ix.lat,lng:ix.lng}) : Infinity;
+        const d2 = pos2 ? haversine({lat:pos2.lat,lng:pos2.lng},{lat:ix.lat,lng:ix.lng}) : Infinity;
+        const crossed1 = pos1 ? prev1 <= (ix.nearestIdx||0) && cur1 >= (ix.nearestIdx||0) : false;
+        const crossed2 = pos2 ? prev2 <= ((ix.nearestIdx2??ix.nearestIdx)||0) && cur2 >= ((ix.nearestIdx2??ix.nearestIdx)||0) : false;
+        const need1 = allow1 && emergency && (d1 <= priorityMeters || crossed1);
+        const need2 = allow2 && emergency2 && (d2 <= priorityMeters || crossed2);
+        let next = "red";
+        if (need1 && need2) {
+          if (d1 < d2 - 30) next = "green1";
+          else if (d2 < d1 - 30) next = "green2";
+          else next = "red";
+        } else if (need1) {
+          next = "green1";
+        } else if (need2) {
+          next = "green2";
+        }
+        if (ix.state !== next) {
+          ix.state = next;
+          setLight(ix.id, next);
+          if (next==="green1" || next==="green2") { clearedCount += 1; savedSeconds += 2; }
+        }
+        const passed1 = pos1 && cur1 > (ix.nearestIdx||0) + 0.2;
+        const passed2 = pos2 && cur2 > ((ix.nearestIdx2??ix.nearestIdx)||0) + 0.2;
+        if (!need1 && !need2 && (passed1 || passed2) && ix.state!=="red") {
+          ix.state="red";
+          setLight(ix.id,"red");
+        }
+      });
+    }
+    function nextIxA(curIdx) {
+      const base = Math.floor(curIdx);
+      let best = null, bestDiff = Infinity;
+      intersections.forEach(ix=>{
+        const diff = (ix.nearestIdx||0) - base;
+        if (diff >= 0 && diff < bestDiff) { bestDiff = diff; best = ix; }
+      });
+      return best;
+    }
+    function nextIxB(curIdx) {
+      const base = Math.floor(curIdx);
+      let best = null, bestDiff = Infinity;
+      intersections.forEach(ix=>{
+        const ni = (ix.nearestIdx2??ix.nearestIdx)||0;
+        const diff = ni - base;
+        if (diff >= 0 && diff < bestDiff) { bestDiff = diff; best = ix; }
+      });
+      return best;
+    }
+    const states = [
+      { name: "Andhra Pradesh", lat: 15.9129, lng: 79.7400 },
+      { name: "Arunachal Pradesh", lat: 28.2180, lng: 94.5624 },
+      { name: "Assam", lat: 26.2006, lng: 92.9376 },
+      { name: "Bihar", lat: 25.0961, lng: 85.3131 },
+      { name: "Chhattisgarh", lat: 21.2787, lng: 81.8661 },
+      { name: "Goa", lat: 15.2993, lng: 74.1240 },
+      { name: "Gujarat", lat: 22.2587, lng: 71.1924 },
+      { name: "Haryana", lat: 29.0588, lng: 76.0856 },
+      { name: "Himachal Pradesh", lat: 31.1048, lng: 77.1734 },
+      { name: "Jharkhand", lat: 23.6102, lng: 85.2799 },
+      { name: "Karnataka", lat: 15.3173, lng: 75.7139 },
+      { name: "Kerala", lat: 10.8505, lng: 76.2711 },
+      { name: "Madhya Pradesh", lat: 22.9734, lng: 78.6569 },
+      { name: "Maharashtra", lat: 19.7515, lng: 75.7139 },
+      { name: "Odisha", lat: 20.9517, lng: 85.0985 },
+      { name: "Punjab", lat: 31.1471, lng: 75.3412 },
+      { name: "Rajasthan", lat: 27.0238, lng: 74.2179 },
+      { name: "Tamil Nadu", lat: 11.1271, lng: 78.6569 },
+      { name: "Telangana", lat: 18.1124, lng: 79.0193 },
+      { name: "Uttar Pradesh", lat: 26.8467, lng: 80.9462 },
+      { name: "Uttarakhand", lat: 30.0668, lng: 79.0193 },
+      { name: "West Bengal", lat: 22.9868, lng: 87.8550 },
+      { name: "Delhi", lat: 28.7041, lng: 77.1025 }
+    ];
+    const stateMap = new Map(states.map(s=>[s.name,s]));
+    const fallbackDistricts = {
+      "Maharashtra": ["Mumbai","Pune","Nagpur","Nashik","Thane"],
+      "Karnataka": ["Bengaluru","Mysuru","Mangaluru","Hubballi","Belagavi"],
+      "Tamil Nadu": ["Chennai","Coimbatore","Madurai","Salem","Tiruchirappalli"],
+      "Telangana": ["Hyderabad","Warangal","Karimnagar","Nizamabad","Khammam"],
+      "Uttar Pradesh": ["Lucknow","Kanpur","Varanasi","Noida","Ghaziabad"],
+      "West Bengal": ["Kolkata","Siliguri","Durgapur","Howrah","Asansol"],
+      "Gujarat": ["Ahmedabad","Surat","Vadodara","Rajkot","Bhavnagar"],
+      "Rajasthan": ["Jaipur","Udaipur","Jodhpur","Kota","Ajmer"],
+      "Kerala": ["Thiruvananthapuram","Kochi","Kozhikode","Thrissur","Kollam"],
+      "Andhra Pradesh": ["Visakhapatnam","Vijayawada","Guntur","Nellore","Tirupati"],
+      "Delhi": ["New Delhi"]
+    };
+    function populateStates(sel) {
+      sel.innerHTML = "";
+      states.forEach(s=>{
+        const o = document.createElement("option");
+        o.value = s.name; o.textContent = s.name;
+        sel.appendChild(o);
+      });
+    }
+    function populateDistricts(stateName, sel) {
+      sel.innerHTML = "";
+      const list = fallbackDistricts[stateName] || ["Central","North","South","East","West"];
+      list.forEach(n=>{
+        const o = document.createElement("option");
+        o.value = n; o.textContent = n;
+        sel.appendChild(o);
+      });
+    }
+    function populateHospitals(stateName, districtName, sel) {
+      sel.innerHTML = "";
+      const list = [
+        districtName+" Government Hospital",
+        districtName+" Civil Hospital",
+        "Apollo Hospital",
+        "Fortis Hospital"
+      ];
+      list.forEach(n=>{
+        const o = document.createElement("option");
+        o.value = n; o.textContent = n;
+        sel.appendChild(o);
+      });
+    }
+    function nearestHospitalName(stateName, districtName, fromCoord) {
+      const list = [
+        districtName+" Government Hospital",
+        districtName+" Civil Hospital",
+        "Apollo Hospital",
+        "Fortis Hospital"
+      ];
+      let best = list[0], bestD = Infinity;
+      list.forEach(name=>{
+        const c = pseudoCoord(stateName, name);
+        const d = haversine(fromCoord, c);
+        if (d < bestD) { bestD = d; best = name; }
+      });
+      return best;
+    }
+    // removed renderHospitals: hospital markers no longer shown
+    function pseudoCoord(stateName, districtOrHospital) {
+      const s = stateMap.get(stateName);
+      let h = 0;
+      for (let i=0;i<districtOrHospital.length;i++) h = (h*31 + districtOrHospital.charCodeAt(i))>>>0;
+      const dLat = ((h%1000)/1000 - 0.5) * 0.2;
+      const dLng = (((h/1000)%1000)/1000 - 0.5) * 0.2;
+      return { lat: s.lat + dLat, lng: s.lng + dLng };
+    }
+    function buildRoute(a, b, steps) {
+      const arr = [];
+      for (let i=0;i<=steps;i++) {
+        const t = i/steps;
+        arr.push({ lat: a.lat + (b.lat - a.lat)*t, lng: a.lng + (b.lng - a.lng)*t });
+      }
+      return arr;
+    }
+    function buildIntersectionsFromRoute(r, n) {
+      const arr = [];
+      for (let i=1;i<r.length-1;i+=Math.max(1,Math.floor(r.length/n))) {
+        arr.push({ id: "X"+i, lat: r[i].lat, lng: r[i].lng, state: "red", nearestIdx: i });
+      }
+      return arr;
+    }
+    function nearestIndexOnRoute(pt, r = route) {
+      let best = 0, bestD = Infinity;
+      for (let i=0;i<r.length;i++) {
+        const d = haversine(pt, r[i]);
+        if (d < bestD) { bestD = d; best = i; }
+      }
+      return best;
+    }
+    async function fetchOSRMRoute(a, b) {
+      const url = "https://router.project-osrm.org/route/v1/driving/"+a.lng+","+a.lat+";"+b.lng+","+b.lat+"?overview=full&geometries=geojson";
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("route");
+      const j = await res.json();
+      const coords = j.routes[0].geometry.coordinates.map(c=>({ lat: c[1], lng: c[0] }));
+      return coords;
+    }
+    function refreshMap() {
+      Object.values(markers).forEach(m=>m.remove());
+      Object.keys(markers).forEach(k=>delete markers[k]);
+      intersections.forEach(ix=>{
+        const c = signalOffsetCoord(ix);
+        const m = L.marker([c.lat, c.lng], { icon: makeSignalIcon(ix.state||"red") });
+        m.bindTooltip("Signal "+ix.id+" ("+(ix.state||"red")+")");
+        m.addTo(map);
+        markers[ix.id] = m;
+      });
+      if (poly) poly.remove();
+      poly = L.polyline(route.map(p=>[p.lat,p.lng]), { pane: 'routePane', color: '#00ffd1', weight: 7, opacity: 0.95 }).addTo(map);
+      map.setView([route[0].lat, route[0].lng], 12);
+      vehicleMarker.setLatLng([route[0].lat, route[0].lng]);
+    }
+    let trafficSegs = [];
+    function trafficColor(state) {
+      if (state === "cleared") return "#00e0a4";
+      if (state === "heavy") return "#ff3b3b";
+      if (state === "medium") return "#f39c12";
+      return "#ffd84a";
+    }
+    function buildTraffic() {
+      trafficLayer.clearLayers();
+      trafficSegs = [];
+      for (let i=0;i<route.length-1;i++) {
+        const r = Math.random();
+        const state = r>0.66 ? "heavy" : r>0.33 ? "medium" : "light";
+        const seg = L.polyline([[route[i].lat, route[i].lng],[route[i+1].lat, route[i+1].lng]], { pane: 'trafficPane', color: trafficColor(state), weight: 6, opacity: 0.6, dashArray: "8,8" }).addTo(trafficLayer);
+        trafficSegs.push({ i, state, seg });
+      }
+    }
+    function clearTrafficNear(posA, posB) {
+      trafficSegs.forEach(t=>{
+        const mid = { lat: (route[t.i].lat + route[t.i+1].lat)/2, lng: (route[t.i].lng + route[t.i+1].lng)/2 };
+        const dA = posA ? haversine(posA, mid) : Infinity;
+        const dB = posB ? haversine(posB, mid) : Infinity;
+        const near = Math.min(dA, dB);
+        if (near <= priorityMeters) {
+          if (t.state !== "cleared") {
+            t.state = "cleared";
+            t.seg.setStyle({ color: trafficColor("cleared"), dashArray: null, opacity: 0.9, weight: 7 });
+          }
+        }
+      });
+    }
+    
+    function pollBookings() {
+      let lastSeq = 0;
+      setInterval(async ()=>{
+        try {
+          const res = await fetch("http://" + location.hostname + ":5515/last");
+          const j = await res.json();
+          if (j && j.seq && j.seq !== lastSeq) {
+            lastSeq = j.seq;
+            const d = j.data || {};
+            if (driverNotifyEl) driverNotifyEl.textContent = "Booking #"+j.seq+": "+(d.name||"")+" ("+(d.phone||"")+") from "+(d.state||"")+", "+(d.district||"");
+            if (d.state && d.district) {
+              sourceStateEl.value = d.state;
+              populateDistricts(d.state, sourceDistrictEl);
+              sourceDistrictEl.value = d.district;
+            }
+          }
+        } catch {}
+      }, 2000);
+    }
+    
+    
+    populateStates(sourceStateEl);
+    populateStates(destStateEl);
+    populateDistricts(sourceStateEl.value, sourceDistrictEl);
+    populateDistricts(destStateEl.value, destDistrictEl);
+    populateHospitals(destStateEl.value, destDistrictEl.value, destHospitalEl);
+    sourceStateEl.addEventListener("change", ()=>{
+      populateDistricts(sourceStateEl.value, sourceDistrictEl);
+    });
+    destStateEl.addEventListener("change", ()=>{
+      populateDistricts(destStateEl.value, destDistrictEl);
+      populateHospitals(destStateEl.value, destDistrictEl.value, destHospitalEl);
+    });
+    destDistrictEl.addEventListener("change", ()=>{
+      populateHospitals(destStateEl.value, destDistrictEl.value, destHospitalEl);
+    });
+    sourceDistrictEl.addEventListener("change", ()=>{
+      /* no-op: hospital markers removed */
+    });
+    async function startSim() {
+      if (sim) return;
+      idx = 0;
+      posIdx = 0;
+      posIdx2 = 0;
+      let prevPosIdx2 = 0;
+      clearedCount = 0;
+      savedSeconds = 0;
+      emergency = true;
+      document.getElementById("emergencyToggle").checked = true;
+      startSiren(document.getElementById('vehicleType').value);
+      const startA = pseudoCoord(sourceStateEl.value, sourceDistrictEl.value);
+      const dstA = pseudoCoord(destStateEl.value, destHospitalEl.value);
+      try {
+        route = await fetchOSRMRoute(startA, dstA);
+      } catch {
+        route = buildRoute(startA, dstA, 40);
+      }
+      buildTraffic();
+      if (hospitalMarker) hospitalMarker.remove();
+      hospitalMarker = L.marker([dstA.lat, dstA.lng], { icon: makeHospitalIcon() }).addTo(map);
+      const n = Math.max(1, parseInt(signalsCountEl.value || "12", 10));
+      intersections = buildIntersectionsFromRoute(route, n);
+      intersections.forEach(ix=>{ ix.state="red"; });
+      intersections.forEach(ix=>{ ix.nearestIdx = nearestIndexOnRoute({ lat: ix.lat, lng: ix.lng }, route); });
+      if (document.getElementById("secondAmbulanceToggle").checked) {
+        emergency2 = true;
+        route2 = route.slice().reverse();
+        if (vehicleMarker2) vehicleMarker2.remove();
+        vehicleMarker2 = L.marker([route2[0].lat, route2[0].lng], { icon: makeVehicleIcon("ambulance") }).addTo(map);
+        intersections.forEach(ix=>{ ix.nearestIdx2 = nearestIndexOnRoute({ lat: ix.lat, lng: ix.lng }, route2); });
+      } else {
+        emergency2 = false;
+        if (vehicleMarker2) { vehicleMarker2.remove(); vehicleMarker2=null; }
+        intersections.forEach(ix=>{ delete ix.nearestIdx2; });
+      }
+      refreshMap();
+      updateStats();
+      let prevPosIdx = posIdx;
+      sim = setInterval(()=>{
+        const inc = speedKmh/baseSpeedKmh;
+        const iCur = Math.floor(posIdx);
+        const tCur = posIdx - iCur;
+        const posCur = {
+          lat: route[iCur].lat + (route[iCur+1].lat - route[iCur].lat)*tCur,
+          lng: route[iCur].lng + (route[iCur+1].lng - route[iCur].lng)*tCur
+        };
+        let posCurB = null;
+        if (emergency2) {
+          const jCur = Math.floor(posIdx2);
+          const tbCur = posIdx2 - jCur;
+          posCurB = {
+            lat: route2[jCur].lat + (route2[jCur+1].lat - route2[jCur].lat)*tbCur,
+            lng: route2[jCur].lng + (route2[jCur+1].lng - route2[jCur].lng)*tbCur
+          };
+        }
+        clearTrafficNear(posCur, posCurB);
+        
+        let allowA = Date.now() >= pausedUntilA;
+        let allowB = emergency2 && Date.now() >= pausedUntilB;
+        if (emergency2) {
+          const ia = nextIxA(posIdx);
+          const ib = nextIxB(posIdx2);
+          if (ia && ib) {
+            const ptA = route[ia.nearestIdx||0];
+            const niB = (ib.nearestIdx2??ib.nearestIdx)||0;
+            const ptB = route2[niB];
+            const dA = haversine(posCur, ptA);
+            const dB = haversine(posCurB, ptB);
+            if (dA <= conflictRadius && dB <= conflictRadius) {
+              let winner;
+              if (Math.abs(dA - dB) <= 30) {
+                winner = (lastGrant === "A") ? "B" : "A";
+              } else {
+                winner = dA < dB ? "A" : "B";
+              }
+              if (winner === "A") {
+                allowA = true;
+                if (allowB) { allowB = false; pausedUntilB = Date.now() + waitMs; }
+                lastGrant = "A";
+              } else {
+                allowB = true;
+                if (allowA) { allowA = false; pausedUntilA = Date.now() + waitMs; }
+                lastGrant = "B";
+              }
+            }
+          }
+        }
+        posIdx += allowA ? inc : 0;
+        if (emergency2) posIdx2 += allowB ? inc : 0;
+        const i = Math.floor(posIdx);
+        if (i >= route.length-1) {
+          vehicleMarker.setLatLng([route[route.length-1].lat, route[route.length-1].lng]);
+          if (sim) { clearInterval(sim); sim = null; }
+          return;
+        }
+        const t = posIdx - i;
+        const pos = {
+          lat: route[i].lat + (route[i+1].lat - route[i].lat)*t,
+          lng: route[i].lng + (route[i+1].lng - route[i].lng)*t
+        };
+        let posB = null;
+        if (emergency2) {
+          const j = Math.floor(posIdx2);
+          const tb = posIdx2 - j;
+          if (j < route2.length-1) {
+            posB = {
+              lat: route2[j].lat + (route2[j+1].lat - route2[j].lat)*tb,
+              lng: route2[j].lng + (route2[j+1].lng - route2[j].lng)*tb
+            };
+            vehicleMarker2.setLatLng([posB.lat, posB.lng]);
+          } else {
+            vehicleMarker2.setLatLng([route2[route2.length-1].lat, route2[route2.length-1].lng]);
+          }
+        }
+        vehicleMarker.setLatLng([pos.lat, pos.lng]);
+        wavePriorityAround(pos, prevPosIdx, posIdx, posB, prevPosIdx2, posIdx2, allowA, emergency2 ? allowB : false);
+        prevPosIdx = posIdx;
+        prevPosIdx2 = posIdx2;
+        updateStats();
+      }, stepMs);
+    }
+    let posIdx = 0;
+    let posIdx2 = 0;
+    function stopSim() {
+      if (sim) clearInterval(sim);
+      sim = null;
+      stopSiren();
+      emergency2 = false;
+    }
+    document.getElementById("startBtn").addEventListener("click", startSim);
+    document.getElementById("stopBtn").addEventListener("click", stopSim);
+    document.getElementById("voiceSetupBtn").addEventListener("click", voiceSetupRoute);
+    
+    document.getElementById("secondAmbulanceToggle").addEventListener("change", e=>{
+      emergency2 = e.target.checked;
+      if (!route.length) return;
+      if (emergency2) {
+        route2 = route.slice().reverse();
+        if (vehicleMarker2) vehicleMarker2.remove();
+        vehicleMarker2 = L.marker([route2[0].lat, route2[0].lng], { icon: makeVehicleIcon("ambulance") }).addTo(map);
+        intersections.forEach(ix=>{ ix.nearestIdx2 = nearestIndexOnRoute({ lat: ix.lat, lng: ix.lng }, route2); });
+      } else {
+        if (vehicleMarker2) { vehicleMarker2.remove(); vehicleMarker2=null; }
+        intersections.forEach(ix=>{ delete ix.nearestIdx2; });
+        intersections.forEach(ix=>{ if (ix.state==="green2") { ix.state="red"; setLight(ix.id,"red"); } });
+      }
+    });
+    updateStats();
+    pollBookings();
+  </script>
+</body>
+</html>
